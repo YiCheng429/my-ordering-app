@@ -11,6 +11,7 @@ import {
   query,
   orderBy,
 } from "firebase/firestore";
+import QRCode from "./QRCode";
 
 const FONT = `@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap');`;
 
@@ -43,8 +44,8 @@ const styles = `
   .nav-title { font-size: 20px; font-weight: 900; color: #fff; letter-spacing: 2px; }
   .nav-badge { background: var(--gold); color: #fff; border-radius: 99px; padding: 4px 12px; font-size: 13px; font-weight: 700; cursor: pointer; transition: transform .15s; }
   .nav-badge:hover { transform: scale(1.05); }
-  .tabs { display: flex; border-bottom: 2px solid var(--border); background: var(--surface); }
-  .tab { flex: 1; padding: 12px 4px; text-align: center; font-size: 13px; font-weight: 700; color: var(--ink-3); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all .2s; }
+  .tabs { display: flex; border-bottom: 2px solid var(--border); background: var(--surface); overflow-x: auto; }
+  .tab { flex: 1; padding: 12px 4px; text-align: center; font-size: 12px; font-weight: 700; color: var(--ink-3); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all .2s; white-space: nowrap; }
   .tab.active { color: var(--red); border-bottom-color: var(--red); }
   .cat-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 14px 16px; scrollbar-width: none; }
   .cat-scroll::-webkit-scrollbar { display: none; }
@@ -308,6 +309,7 @@ export default function App() {
                   </div>
                   <div className={`tab ${adminTab === "menu" ? "active" : ""}`} onClick={() => setAdminTab("menu")}>菜單管理</div>
                   <div className={`tab ${adminTab === "history" ? "active" : ""}`} onClick={() => setAdminTab("history")}>歷史</div>
+                  <div className={`tab ${adminTab === "qrcode" ? "active" : ""}`} onClick={() => setAdminTab("qrcode")}>QR Code</div>
                 </div>
                 {adminTab === "orders" && (
                   <>
@@ -391,6 +393,13 @@ export default function App() {
                       </>
                     )}
                   </>
+                )}
+                {adminTab === "qrcode" && (
+                  <div style={{padding:24,display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
+                    <div className="section-title" style={{alignSelf:"flex-start"}}>點餐QR Code</div>
+                    <QRCode url="https://my-ordering-app.vercel.app" />
+                    <div style={{fontSize:13,color:"#8C7355",textAlign:"center"}}>印出來貼在桌上，客人掃描即可點餐</div>
+                  </div>
                 )}
                 <button className="logout-btn" onClick={handleLogout}>登出後台</button>
               </div>
