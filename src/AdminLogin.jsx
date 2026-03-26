@@ -10,7 +10,7 @@ export default function AdminLogin({ onLogin }) {
     setLoading(true);                          // 顯示載入中
 
     try {
-      const res = await fetch("http://localhost:3001/api/login", {  // 傳密碼給後端
+        const res = await fetch("https://my-ordering-app-production.up.railway.app/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: pw }) // 把密碼包成JSON傳過去
