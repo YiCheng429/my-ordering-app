@@ -7,7 +7,9 @@ const jwt = require("jsonwebtoken");       // 載入token工具
 dotenv.config();                           // 讀取.env檔案
 
 const app = express();                     // 建立server
-app.use(cors());                           // 允許前端連線
+app.use(cors({
+  origin: "https://my-ordering-app.vercel.app"
+}));                         // 允許前端連線
 app.use(express.json());                   // 允許接收JSON格式資料
 
 // 把管理員密碼加密存起來
