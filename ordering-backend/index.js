@@ -8,8 +8,11 @@ dotenv.config();                           // 讀取.env檔案
 
 const app = express();                     // 建立server
 app.use(cors({
-  origin: "https://my-ordering-app.vercel.app"
-}));                         // 允許前端連線
+  origin: [
+    "https://my-ordering-app.vercel.app",
+    "http://localhost:5173"
+  ]
+}));
 app.use(express.json());                   // 允許接收JSON格式資料
 
 // 把管理員密碼加密存起來

@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCJUHd4t-RgruWWyNVy8kfKx6h-8PPk8uc",
@@ -11,4 +12,5 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);  // 匯出資料庫實例，其他檔案可以使用
+export const db = getFirestore(app);
+export const storage = getStorage(app);

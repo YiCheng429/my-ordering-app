@@ -12,20 +12,10 @@ import {
   orderBy,
 } from "firebase/firestore";
 import QRCode from "./QRCode";
+import { storage } from "./firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const FONT = `@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap');`;
-
-const INITIAL_MENU = [
-  { id: 1, name: "滷肉飯", price: 40, category: "主食", available: true, emoji: "🍚" },
-  { id: 2, name: "虱目魚粥", price: 65, category: "主食", available: true, emoji: "🐟" },
-  { id: 3, name: "肉燥麵", price: 50, category: "主食", available: true, emoji: "🍜" },
-  { id: 4, name: "油豆腐", price: 20, category: "小菜", available: true, emoji: "🟡" },
-  { id: 5, name: "滷蛋", price: 15, category: "小菜", available: true, emoji: "🥚" },
-  { id: 6, name: "燙青菜", price: 25, category: "小菜", available: true, emoji: "🥬" },
-  { id: 7, name: "魚丸湯", price: 30, category: "湯品", available: true, emoji: "🍲" },
-  { id: 8, name: "豆腐味噌湯", price: 25, category: "湯品", available: false, emoji: "🍵" },
-  { id: 9, name: "紅茶", price: 20, category: "飲料", available: true, emoji: "🧋" },
-];
 
 const CATEGORIES = ["全部", "主食", "小菜", "湯品", "飲料"];
 
@@ -122,11 +112,15 @@ const styles = `
   .empty-state span { font-size: 14px; }
   .logout-btn { margin: 0 16px 16px; padding: 10px; width: calc(100% - 32px); background: transparent; border: 1.5px solid var(--border); border-radius: var(--radius); font-size: 13px; font-weight: 700; color: var(--ink-3); cursor: pointer; }
   .logout-btn:hover { border-color: var(--red); color: var(--red); }
+  .no-shop { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 12px; color: var(--ink-3); text-align: center; padding: 24px; }
+  .no-shop p { font-size: 48px; }
+  .no-shop span { font-size: 15px; }
 `;
 
 export default function App() {
+  const shopId = window.location.pathname.split("/")[2];
   const [view, setView] = useState("customer");
-  const [menu] = useState(INITIAL_MENU);
+  const [menu, setMenu] = useState([]);
   const [cart, setCart] = useState({});
   const [cartOpen, setCartOpen] = useState(false);
   const [orders, setOrders] = useState([]);
@@ -134,9 +128,44 @@ export default function App() {
   const [category, setCategory] = useState("全部");
   const [adminTab, setAdminTab] = useState("orders");
   const [adminAuth, setAdminAuth] = useState(false);
+  const uploadImage = async (file, itemId) => {
+  const imageRef = ref(storage, `shops/${shopId}/menu/${itemId}`);
+  await uploadBytes(imageRef, file);
+  const url = await getDownloadURL(imageRef);
+  await updateDoc(doc(db, "shops", shopId, "menu", itemId), { image: url });
+};
+  const [shopName, setShopName] = useState("");
 
+  // 讀店家資訊
   useEffect(() => {
-    const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+    if (!shopId) return;
+    const shopRef = doc(db, "shops", shopId);
+    const unsubscribe = onSnapshot(shopRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setShopName(snapshot.data().name || shopId);
+      }
+    });
+    return () => unsubscribe();
+  }, [shopId]);
+
+  // 讀菜單
+  useEffect(() => {
+    if (!shopId) return;
+    const menuRef = collection(db, "shops", shopId, "menu");
+    const unsubscribe = onSnapshot(menuRef, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setMenu(data);
+    });
+    return () => unsubscribe();
+  }, [shopId]);
+
+  // 讀訂單
+  useEffect(() => {
+    if (!shopId) return;
+    const q = query(collection(db, "shops", shopId, "orders"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({
         firestoreId: doc.id,
@@ -146,7 +175,7 @@ export default function App() {
       setOrders(data);
     });
     return () => unsubscribe();
-  }, []);
+  }, [shopId]);
 
   const addItem = useCallback((id) => {
     setCart(c => ({ ...c, [id]: (c[id] || 0) + 1 }));
@@ -162,7 +191,7 @@ export default function App() {
 
   const cartCount = Object.values(cart).reduce((a, b) => a + b, 0);
   const cartTotal = Object.entries(cart).reduce((sum, [id, qty]) => {
-    const item = menu.find(m => m.id === Number(id));
+    const item = menu.find(m => m.id === id);
     return sum + (item ? item.price * qty : 0);
   }, 0);
 
@@ -171,10 +200,10 @@ export default function App() {
   const submitOrder = async () => {
     if (cartCount === 0) return;
     const items = Object.entries(cart).map(([id, qty]) => {
-      const item = menu.find(m => m.id === Number(id));
-      return { id: item.id, name: item.name, price: item.price, emoji: item.emoji, qty };
+      const item = menu.find(m => m.id === id);
+      return { id: item.id, name: item.name, price: item.price, emoji: item.emoji || "🍽", qty };
     });
-    const docRef = await addDoc(collection(db, "orders"), {
+    const docRef = await addDoc(collection(db, "shops", shopId, "orders"), {
       items,
       total: cartTotal,
       status: "pending",
@@ -186,7 +215,13 @@ export default function App() {
   };
 
   const markDone = async (firestoreId) => {
-    await updateDoc(doc(db, "orders", firestoreId), { status: "done" });
+    await updateDoc(doc(db, "shops", shopId, "orders", firestoreId), { status: "done" });
+  };
+
+  const toggleAvailable = async (item) => {
+    await updateDoc(doc(db, "shops", shopId, "menu", item.id), {
+      available: !item.available,
+    });
   };
 
   const handleLogout = () => {
@@ -200,12 +235,25 @@ export default function App() {
   const todayRevenue = orders.reduce((s, o) => s + o.total, 0);
   const formatTime = (d) => d ? `${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}` : "";
 
+  // 沒有 shopId 顯示錯誤畫面
+  if (!shopId) {
+    return (
+      <>
+        <style>{styles}</style>
+        <div className="no-shop">
+          <p>🏮</p>
+          <span>找不到店家，請確認網址是否正確</span>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <style>{styles}</style>
       <div className="app">
         <nav className="nav">
-          <span className="nav-title">{view === "customer" ? "🏮 阿嬤小吃" : "⚙️ 後台管理"}</span>
+          <span className="nav-title">{view === "customer" ? `🏮 ${shopName}` : "⚙️ 後台管理"}</span>
           <span className="nav-badge" onClick={() => setView(v => v === "customer" ? "admin" : "customer")}>
             {view === "customer" ? "後台" : "點餐"}
           </span>
@@ -228,24 +276,31 @@ export default function App() {
                   ))}
                 </div>
                 <div className="menu-list">
-                  {filteredMenu.map(item => (
-                    <div key={item.id} className={`menu-item ${!item.available ? "unavail" : ""}`}>
-                      <div className="menu-emoji">{item.emoji}</div>
-                      <div className="menu-info">
-                        <div className="menu-name">{item.name}</div>
-                        <div className="menu-price">NT$ {item.price}</div>
-                        <span className="menu-tag">{item.category}</span>
-                        {!item.available && <span className="menu-tag" style={{marginLeft:4,borderColor:"#D0421B",color:"#D0421B"}}>售完</span>}
-                      </div>
-                      {item.available && (
-                        <div className="qty-ctrl">
-                          <button className="qty-btn" onClick={() => removeItem(item.id)}>−</button>
-                          <span className="qty-num">{cart[item.id] || 0}</span>
-                          <button className="qty-btn" onClick={() => addItem(item.id)}>＋</button>
+                  {menu.length === 0 ? (
+                    <div className="empty-state"><p>🍽</p><span>菜單載入中...</span></div>
+                  ) : (
+                    filteredMenu.map(item => (
+                      <div key={item.id} className={`menu-item ${!item.available ? "unavail" : ""}`}>
+                        {item.image
+                          ? <img src={item.image} style={{width:48, height:48, borderRadius:8, objectFit:"cover"}} />
+                          : <div className="menu-emoji">{item.emoji || "🍽"}</div>
+                        }
+                        <div className="menu-info">
+                          <div className="menu-name">{item.name}</div>
+                          <div className="menu-price">NT$ {item.price}</div>
+                          <span className="menu-tag">{item.category}</span>
+                          {!item.available && <span className="menu-tag" style={{marginLeft:4,borderColor:"#D0421B",color:"#D0421B"}}>售完</span>}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        {item.available && (
+                          <div className="qty-ctrl">
+                            <button className="qty-btn" onClick={() => removeItem(item.id)}>−</button>
+                            <span className="qty-num">{cart[item.id] || 0}</span>
+                            <button className="qty-btn" onClick={() => addItem(item.id)}>＋</button>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
                 {cartCount > 0 && (
                   <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:150,width:"calc(100% - 32px)",maxWidth:448}}>
@@ -260,10 +315,11 @@ export default function App() {
                       <div className="drawer-handle"/>
                       <div className="drawer-title">確認訂單</div>
                       {Object.entries(cart).map(([id, qty]) => {
-                        const item = menu.find(m => m.id === Number(id));
+                        const item = menu.find(m => m.id === id);
+                        if (!item) return null;
                         return (
                           <div key={id} className="cart-row">
-                            <div className="cart-row-name">{item.emoji} {item.name} × {qty}</div>
+                            <div className="cart-row-name">{item.emoji || "🍽"} {item.name} × {qty}</div>
                             <div className="cart-row-price">NT$ {item.price * qty}</div>
                           </div>
                         );
@@ -286,7 +342,7 @@ export default function App() {
             ? <AdminLogin onLogin={() => setAdminAuth(true)} />
             : <div className="admin-wrap">
                 <div className="admin-header">
-                  <h2>阿嬤小吃 後台</h2>
+                  <h2>{shopName} 後台</h2>
                   <p>今日 {new Date().toLocaleDateString("zh-TW")}</p>
                 </div>
                 <div className="stats-row">
@@ -326,9 +382,9 @@ export default function App() {
                               <span className="order-status status-pending">待處理</span>
                             </div>
                             <div className="order-items">
-                              {order.items?.map(item => (
-                                <div key={item.id} className="order-item-row">
-                                  <span>{item.emoji} {item.name} × {item.qty}</span>
+                              {order.items?.map((item, i) => (
+                                <div key={i} className="order-item-row">
+                                  <span>{item.emoji || "🍽"} {item.name} × {item.qty}</span>
                                   <span>NT$ {item.price * item.qty}</span>
                                 </div>
                               ))}
@@ -347,19 +403,35 @@ export default function App() {
                   <>
                     <div className="section-title">菜單品項</div>
                     {menu.map(item => (
-                      <div key={item.id} className="menu-admin-item">
-                        <span style={{fontSize:24}}>{item.emoji}</span>
-                        <div className="menu-admin-info">
-                          <div className="menu-admin-name">{item.name}</div>
-                          <div className="menu-admin-price">NT$ {item.price} · {item.category}</div>
-                        </div>
+                    <div key={item.id} className="menu-admin-item">
+                      {item.image
+                        ? <img src={item.image} style={{width:48, height:48, borderRadius:8, objectFit:"cover"}} />
+                        : <span style={{fontSize:24}}>🍽</span>
+                      }
+                      <div className="menu-admin-info">
+                        <div className="menu-admin-name">{item.name}</div>
+                        <div className="menu-admin-price">NT$ {item.price} · {item.category}</div>
+                      </div>
+                      <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:4}}>
                         <label className="toggle">
-                          <input type="checkbox" checked={item.available} onChange={() => {}} />
+                          <input type="checkbox" checked={item.available ?? true} onChange={() => toggleAvailable(item)} />
                           <div className="toggle-track"/>
                           <div className="toggle-thumb"/>
                         </label>
+                        <label style={{fontSize:11, color:"var(--ink-3)", cursor:"pointer"}}>
+                          📷
+                          <input
+                            type="file"
+                            accept="image/*"
+                            style={{display:"none"}}
+                            onChange={(e) => {
+                              if (e.target.files[0]) uploadImage(e.target.files[0], item.id);
+                            }}
+                          />
+                        </label>
                       </div>
-                    ))}
+                    </div>
+                  ))}
                   </>
                 )}
                 {adminTab === "history" && (
@@ -377,9 +449,9 @@ export default function App() {
                               <span className="order-status status-done">完成</span>
                             </div>
                             <div className="order-items">
-                              {order.items?.map(item => (
-                                <div key={item.id} className="order-item-row">
-                                  <span>{item.emoji} {item.name} × {item.qty}</span>
+                              {order.items?.map((item, i) => (
+                                <div key={i} className="order-item-row">
+                                  <span>{item.emoji || "🍽"} {item.name} × {item.qty}</span>
                                   <span>NT$ {item.price * item.qty}</span>
                                 </div>
                               ))}
@@ -397,7 +469,7 @@ export default function App() {
                 {adminTab === "qrcode" && (
                   <div style={{padding:24,display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
                     <div className="section-title" style={{alignSelf:"flex-start"}}>點餐QR Code</div>
-                    <QRCode url="https://my-ordering-app.vercel.app" />
+                    <QRCode url={`https://my-ordering-app.vercel.app/shop/${shopId}`} />
                     <div style={{fontSize:13,color:"#8C7355",textAlign:"center"}}>印出來貼在桌上，客人掃描即可點餐</div>
                   </div>
                 )}
