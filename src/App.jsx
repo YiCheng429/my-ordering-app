@@ -39,7 +39,7 @@ const styles = `
   .tab.active { color: var(--red); border-bottom-color: var(--red); }
   .cat-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 14px 16px; scrollbar-width: none; }
   .cat-scroll::-webkit-scrollbar { display: none; }
-  .cat-btn { flex-shrink: 0; padding: 6px 16px; border-radius: 99px; border: 1.5px solid var(--border); background: var(--surface); font-size: 13px; font-weight: 500; cursor: pointer; transition: all .15s; white-space: nowrap; }
+  .cat-btn { flex-shrink: 0; padding: 6px 16px; border-radius: 99px; border: 1.5px solid var(--border); background: var(--surface); font-size: 13px; font-weight: 500; cursor: pointer; transition: all .15s; white-space: nowrap; color: var(--ink); }
   .cat-btn.active { background: var(--red); border-color: var(--red); color: #fff; }
   .menu-list { padding: 0 16px 120px; display: flex; flex-direction: column; gap: 10px; }
   .menu-item { background: var(--surface); border-radius: var(--radius); border: 1.5px solid var(--border); padding: 14px 16px; display: flex; align-items: center; gap: 12px; box-shadow: var(--shadow); transition: transform .15s; }
@@ -115,6 +115,9 @@ const styles = `
   .no-shop { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 12px; color: var(--ink-3); text-align: center; padding: 24px; }
   .no-shop p { font-size: 48px; }
   .no-shop span { font-size: 15px; }
+  .note-input { width: 100%; padding: 12px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 14px; font-family: 'Noto Sans TC', sans-serif; resize: none; height: 80px; margin-top: 8px; outline: none; box-sizing: border-box; background: var(--surface); color: var(--ink); }
+  .note-input:focus { border-color: var(--red); }
+  .order-note { padding: 4px 16px 8px; font-size: 13px; color: var(--ink-3); }
 `;
 
 export default function App() {
@@ -128,15 +131,16 @@ export default function App() {
   const [category, setCategory] = useState("全部");
   const [adminTab, setAdminTab] = useState("orders");
   const [adminAuth, setAdminAuth] = useState(false);
-  const uploadImage = async (file, itemId) => {
-  const imageRef = ref(storage, `shops/${shopId}/menu/${itemId}`);
-  await uploadBytes(imageRef, file);
-  const url = await getDownloadURL(imageRef);
-  await updateDoc(doc(db, "shops", shopId, "menu", itemId), { image: url });
-};
   const [shopName, setShopName] = useState("");
+  const [note, setNote] = useState("");
 
-  // 讀店家資訊
+  const uploadImage = async (file, itemId) => {
+    const imageRef = ref(storage, `shops/${shopId}/menu/${itemId}`);
+    await uploadBytes(imageRef, file);
+    const url = await getDownloadURL(imageRef);
+    await updateDoc(doc(db, "shops", shopId, "menu", itemId), { image: url });
+  };
+
   useEffect(() => {
     if (!shopId) return;
     const shopRef = doc(db, "shops", shopId);
@@ -148,7 +152,6 @@ export default function App() {
     return () => unsubscribe();
   }, [shopId]);
 
-  // 讀菜單
   useEffect(() => {
     if (!shopId) return;
     const menuRef = collection(db, "shops", shopId, "menu");
@@ -162,7 +165,6 @@ export default function App() {
     return () => unsubscribe();
   }, [shopId]);
 
-  // 讀訂單
   useEffect(() => {
     if (!shopId) return;
     const q = query(collection(db, "shops", shopId, "orders"), orderBy("createdAt", "desc"));
@@ -199,19 +201,31 @@ export default function App() {
 
   const submitOrder = async () => {
     if (cartCount === 0) return;
+
+    // 計算今天的訂單數量當作號碼
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayOrders = orders.filter(o => o.time >= startOfDay);
+    const orderNumber = todayOrders.length + 1;
+
     const items = Object.entries(cart).map(([id, qty]) => {
       const item = menu.find(m => m.id === id);
       return { id: item.id, name: item.name, price: item.price, emoji: item.emoji || "🍽", qty };
     });
-    const docRef = await addDoc(collection(db, "shops", shopId, "orders"), {
+
+    await addDoc(collection(db, "shops", shopId, "orders"), {
       items,
       total: cartTotal,
       status: "pending",
+      note: note || "",
+      orderNumber,
       createdAt: serverTimestamp(),
     });
+
     setCart({});
+    setNote("");
     setCartOpen(false);
-    setSuccess(docRef.id.slice(-4).toUpperCase());
+    setSuccess(orderNumber);
   };
 
   const markDone = async (firestoreId) => {
@@ -235,7 +249,6 @@ export default function App() {
   const todayRevenue = orders.reduce((s, o) => s + o.total, 0);
   const formatTime = (d) => d ? `${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}` : "";
 
-  // 沒有 shopId 顯示錯誤畫面
   if (!shopId) {
     return (
       <>
@@ -328,6 +341,12 @@ export default function App() {
                         <span>合計</span>
                         <span>NT$ {cartTotal}</span>
                       </div>
+                      <textarea
+                        className="note-input"
+                        placeholder="備注（例如：不要香菜、少辣）"
+                        value={note}
+                        onChange={e => setNote(e.target.value)}
+                      />
                       <button className="submit-btn" onClick={submitOrder}>送出訂單</button>
                     </div>
                   </div>
@@ -377,7 +396,7 @@ export default function App() {
                         {pendingOrders.map(order => (
                           <div key={order.firestoreId} className="order-card">
                             <div className="order-card-head">
-                              <span className="order-num">#{order.firestoreId?.slice(-4).toUpperCase()}</span>
+                              <span className="order-num">#{order.orderNumber}</span>
                               <span className="order-time">{formatTime(order.time)}</span>
                               <span className="order-status status-pending">待處理</span>
                             </div>
@@ -389,6 +408,9 @@ export default function App() {
                                 </div>
                               ))}
                             </div>
+                            {order.note && (
+                              <div className="order-note">📝 {order.note}</div>
+                            )}
                             <div className="order-card-foot">
                               <div className="order-total">合計 <span>NT$ {order.total}</span></div>
                               <button className="done-btn" onClick={() => markDone(order.firestoreId)}>✓ 完成</button>
@@ -403,35 +425,35 @@ export default function App() {
                   <>
                     <div className="section-title">菜單品項</div>
                     {menu.map(item => (
-                    <div key={item.id} className="menu-admin-item">
-                      {item.image
-                        ? <img src={item.image} style={{width:48, height:48, borderRadius:8, objectFit:"cover"}} />
-                        : <span style={{fontSize:24}}>🍽</span>
-                      }
-                      <div className="menu-admin-info">
-                        <div className="menu-admin-name">{item.name}</div>
-                        <div className="menu-admin-price">NT$ {item.price} · {item.category}</div>
+                      <div key={item.id} className="menu-admin-item">
+                        {item.image
+                          ? <img src={item.image} style={{width:48, height:48, borderRadius:8, objectFit:"cover"}} />
+                          : <span style={{fontSize:24}}>🍽</span>
+                        }
+                        <div className="menu-admin-info">
+                          <div className="menu-admin-name">{item.name}</div>
+                          <div className="menu-admin-price">NT$ {item.price} · {item.category}</div>
+                        </div>
+                        <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:4}}>
+                          <label className="toggle">
+                            <input type="checkbox" checked={item.available ?? true} onChange={() => toggleAvailable(item)} />
+                            <div className="toggle-track"/>
+                            <div className="toggle-thumb"/>
+                          </label>
+                          <label style={{fontSize:11, color:"var(--ink-3)", cursor:"pointer"}}>
+                            📷
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{display:"none"}}
+                              onChange={(e) => {
+                                if (e.target.files[0]) uploadImage(e.target.files[0], item.id);
+                              }}
+                            />
+                          </label>
+                        </div>
                       </div>
-                      <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:4}}>
-                        <label className="toggle">
-                          <input type="checkbox" checked={item.available ?? true} onChange={() => toggleAvailable(item)} />
-                          <div className="toggle-track"/>
-                          <div className="toggle-thumb"/>
-                        </label>
-                        <label style={{fontSize:11, color:"var(--ink-3)", cursor:"pointer"}}>
-                          📷
-                          <input
-                            type="file"
-                            accept="image/*"
-                            style={{display:"none"}}
-                            onChange={(e) => {
-                              if (e.target.files[0]) uploadImage(e.target.files[0], item.id);
-                            }}
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                   </>
                 )}
                 {adminTab === "history" && (
@@ -444,7 +466,7 @@ export default function App() {
                         {doneOrders.map(order => (
                           <div key={order.firestoreId} className="order-card">
                             <div className="order-card-head">
-                              <span className="order-num">#{order.firestoreId?.slice(-4).toUpperCase()}</span>
+                              <span className="order-num">#{order.orderNumber}</span>
                               <span className="order-time">{formatTime(order.time)}</span>
                               <span className="order-status status-done">完成</span>
                             </div>
@@ -456,6 +478,9 @@ export default function App() {
                                 </div>
                               ))}
                             </div>
+                            {order.note && (
+                              <div className="order-note">📝 {order.note}</div>
+                            )}
                             <div className="order-card-foot">
                               <div className="order-total">合計 <span>NT$ {order.total}</span></div>
                               <span className="done-label">✓ 已完成</span>

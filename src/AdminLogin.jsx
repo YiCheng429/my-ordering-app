@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { auth } from "./firebase";
+import { signInAnonymously } from "firebase/auth";
 
 export default function AdminLogin({ onLogin }) {
   const [pw, setPw] = useState("");
@@ -7,20 +9,19 @@ export default function AdminLogin({ onLogin }) {
 
   const handleLogin = async () => {
     if (!pw) return;
-    setLoading(true);                          // 顯示載入中
-
+    setLoading(true);
     try {
-        const res = await fetch("https://my-ordering-app-production.up.railway.app/api/login", {
+      const res = await fetch("https://my-ordering-app-production.up.railway.app/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pw }) // 把密碼包成JSON傳過去
+        body: JSON.stringify({ password: pw })
       });
-
-      const data = await res.json();           // 接收後端回傳的資料
-
+      const data = await res.json();
       if (res.ok) {
-        localStorage.setItem("admin_token", data.token); // 把token存在瀏覽器
-        onLogin();                             // 通知App.jsx登入成功
+        localStorage.setItem("admin_token", data.token);
+        // Railway 驗證成功後，順便做 Firebase 匿名登入
+        await signInAnonymously(auth);
+        onLogin();
       } else {
         setError(data.message || "密碼錯誤");
         setTimeout(() => setError(""), 1500);
@@ -29,7 +30,6 @@ export default function AdminLogin({ onLogin }) {
       setError("無法連線到伺服器");
       setTimeout(() => setError(""), 2000);
     }
-
     setLoading(false);
   };
 
