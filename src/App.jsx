@@ -135,6 +135,11 @@ const styles = `
   .size-btn-label { font-size: 16px; font-weight: 700; }
   .size-btn-price { font-size: 15px; font-weight: 700; color: var(--red); font-family: 'Space Mono', monospace; }
   .cancel-btn { width: 100%; margin-top: 12px; padding: 14px; background: transparent; border: 1.5px solid var(--border); border-radius: var(--radius); font-size: 15px; font-weight: 700; color: var(--ink-3); cursor: pointer; }
+  .settings-form { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .settings-input { padding: 10px 12px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 14px; font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--ink); outline: none; width: 100%; }
+  .settings-input:focus { border-color: var(--red); }
+  .save-btn { padding: 12px; background: var(--green); color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 `;
 
 export default function App() {
@@ -153,6 +158,8 @@ export default function App() {
   const [sizeItem, setSizeItem] = useState(null);
   const [newItem, setNewItem] = useState({ name: "", price: "", category: "主食", hasSizes: false, sizeSmallPrice: "", sizeLargePrice: "" });
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingName, setEditingName] = useState("");
+  const [savingName, setSavingName] = useState(false);
 
   const uploadImage = async (file, itemId) => {
     const imageRef = ref(storage, `shops/${shopId}/menu/${itemId}`);
@@ -288,6 +295,13 @@ export default function App() {
   const deleteMenuItem = async (itemId) => {
     if (!window.confirm("確定要刪除這個品項嗎？")) return;
     await deleteDoc(doc(db, "shops", shopId, "menu", itemId));
+  };
+
+  const saveShopName = async () => {
+    if (!editingName.trim()) return;
+    setSavingName(true);
+    await updateDoc(doc(db, "shops", shopId), { name: editingName.trim() });
+    setSavingName(false);
   };
 
   const handleLogout = () => {
@@ -471,6 +485,7 @@ export default function App() {
                   <div className={`tab ${adminTab === "menu" ? "active" : ""}`} onClick={() => setAdminTab("menu")}>菜單管理</div>
                   <div className={`tab ${adminTab === "history" ? "active" : ""}`} onClick={() => setAdminTab("history")}>歷史</div>
                   <div className={`tab ${adminTab === "qrcode" ? "active" : ""}`} onClick={() => setAdminTab("qrcode")}>QR Code</div>
+                  <div className={`tab ${adminTab === "settings" ? "active" : ""}`} onClick={() => { setAdminTab("settings"); setEditingName(shopName); }}>設定</div>
                 </div>
 
                 {adminTab === "orders" && (
@@ -635,6 +650,25 @@ export default function App() {
                     <div className="section-title" style={{alignSelf:"flex-start"}}>點餐QR Code</div>
                     <QRCode url={`https://my-ordering-app.vercel.app/shop/${shopId}`} />
                     <div style={{fontSize:13,color:"#8C7355",textAlign:"center"}}>印出來貼在桌上，客人掃描即可點餐</div>
+                  </div>
+                )}
+
+                {adminTab === "settings" && (
+                  <div className="settings-form">
+                    <div className="section-title" style={{padding:0}}>商家名稱</div>
+                    <input
+                      className="settings-input"
+                      value={editingName}
+                      onChange={e => setEditingName(e.target.value)}
+                      placeholder="輸入商家名稱"
+                    />
+                    <button
+                      className="save-btn"
+                      onClick={saveShopName}
+                      disabled={savingName}
+                    >
+                      {savingName ? "儲存中..." : "儲存"}
+                    </button>
                   </div>
                 )}
 
