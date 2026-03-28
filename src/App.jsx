@@ -20,6 +20,11 @@ const FONT = `@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC
 
 const CATEGORIES = ["全部", "主食", "小菜", "湯品", "飲料"];
 const CATEGORY_OPTIONS = ["主食", "小菜", "湯品", "飲料"];
+const FONT_OPTIONS = [
+  { label: "思源黑體（現代簡潔）", value: "Noto+Sans+TC" },
+  { label: "思源宋體（古早傳統）", value: "Noto+Serif+TC" },
+  { label: "Cubic 11（圓潤可愛）", value: "Cubic+11" },
+];
 
 const styles = `
   ${FONT}
@@ -160,6 +165,8 @@ export default function App() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingName, setEditingName] = useState("");
   const [savingName, setSavingName] = useState(false);
+  const [shopFont, setShopFont] = useState("Noto+Sans+TC");
+  const [savingFont, setSavingFont] = useState(false);
 
   const uploadImage = async (file, itemId) => {
     const imageRef = ref(storage, `shops/${shopId}/menu/${itemId}`);
@@ -172,10 +179,27 @@ export default function App() {
     if (!shopId) return;
     const shopRef = doc(db, "shops", shopId);
     const unsubscribe = onSnapshot(shopRef, (snapshot) => {
-      if (snapshot.exists()) setShopName(snapshot.data().name || shopId);
+      if (snapshot.exists()) {
+        setShopName(snapshot.data().name || shopId);
+        setShopFont(snapshot.data().fontFamily || "Noto+Sans+TC");
+      }
     });
     return () => unsubscribe();
   }, [shopId]);
+
+  useEffect(() => {
+    const fontName = shopFont.replace(/\+/g, " ");
+    const id = "dynamic-font-link";
+    let link = document.getElementById(id);
+    if (!link) {
+      link = document.createElement("link");
+      link.id = id;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+    }
+    link.href = `https://fonts.googleapis.com/css2?family=${shopFont}:wght@400;500;700;900&display=swap`;
+    document.body.style.fontFamily = `'${fontName}', sans-serif`;
+  }, [shopFont]);
 
   useEffect(() => {
     if (!shopId) return;
@@ -668,6 +692,35 @@ export default function App() {
                       disabled={savingName}
                     >
                       {savingName ? "儲存中..." : "儲存"}
+                    </button>
+
+                    <div className="section-title" style={{padding:0, marginTop:8}}>前台字體</div>
+                    <select
+                      className="settings-input"
+                      value={shopFont}
+                      onChange={e => setShopFont(e.target.value)}
+                    >
+                      {FONT_OPTIONS.map(f => (
+                        <option key={f.value} value={f.value}>{f.label}</option>
+                      ))}
+                    </select>
+                    <div style={{
+                      padding:"12px 16px", borderRadius:8, border:"1.5px solid var(--border)",
+                      fontFamily:`'${shopFont.replace(/\+/g, " ")}', sans-serif`,
+                      fontSize:15, color:"var(--ink-2)", background:"var(--bg)"
+                    }}>
+                      {shopName} · 大碗 NT$65
+                    </div>
+                    <button
+                      className="save-btn"
+                      onClick={async () => {
+                        setSavingFont(true);
+                        await updateDoc(doc(db, "shops", shopId), { fontFamily: shopFont });
+                        setSavingFont(false);
+                      }}
+                      disabled={savingFont}
+                    >
+                      {savingFont ? "儲存中..." : "儲存字體"}
                     </button>
                   </div>
                 )}
