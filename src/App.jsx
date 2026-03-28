@@ -6,6 +6,7 @@ import {
   addDoc,
   onSnapshot,
   updateDoc,
+  deleteDoc,
   doc,
   serverTimestamp,
   query,
@@ -18,6 +19,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 const FONT = `@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap');`;
 
 const CATEGORIES = ["全部", "主食", "小菜", "湯品", "飲料"];
+const CATEGORY_OPTIONS = ["主食", "小菜", "湯品", "飲料"];
 
 const styles = `
   ${FONT}
@@ -73,9 +75,9 @@ const styles = `
   .success-label { font-size: 15px; color: var(--ink-3); display: block; }
   .back-btn { margin-top: 16px; padding: 12px 32px; border: 2px solid var(--red); background: transparent; color: var(--red); border-radius: var(--radius); font-size: 15px; font-weight: 700; cursor: pointer; }
   .admin-wrap { padding: 0 0 80px; }
-  .admin-header { background: var(--ink); color: #fff; padding: 20px 20px 16px; }
-  .admin-header h2 { font-size: 20px; font-weight: 900; letter-spacing: 1px; }
-  .admin-header p { font-size: 12px; color: var(--ink-3); margin-top: 4px; font-family: 'Space Mono', monospace; }
+  .admin-header { background: #3D1C02; color: #fff; padding: 20px 20px 16px; }
+  .admin-header h2 { font-size: 20px; font-weight: 900; letter-spacing: 1px; color: #fff; }
+  .admin-header p { font-size: 12px; color: #F2F2F2; margin-top: 4px; font-family: 'Space Mono', monospace; }
   .stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; padding: 14px 16px; }
   .stat-card { background: var(--surface); border-radius: var(--radius); border: 1.5px solid var(--border); padding: 12px; text-align: center; }
   .stat-num { font-size: 22px; font-weight: 900; font-family: 'Space Mono', monospace; color: var(--red); }
@@ -118,13 +120,28 @@ const styles = `
   .note-input { width: 100%; padding: 12px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 14px; font-family: 'Noto Sans TC', sans-serif; resize: none; height: 80px; margin-top: 8px; outline: none; box-sizing: border-box; background: var(--surface); color: var(--ink); }
   .note-input:focus { border-color: var(--red); }
   .order-note { padding: 4px 16px 8px; font-size: 13px; color: var(--ink-3); }
+  .add-item-form { margin: 8px 16px; background: var(--surface); border-radius: var(--radius); border: 1.5px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .add-item-form input, .add-item-form select { padding: 10px 12px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 14px; font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--ink); outline: none; }
+  .add-item-form input:focus, .add-item-form select:focus { border-color: var(--red); }
+  .add-btn { padding: 10px; background: var(--red); color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .delete-btn { padding: 4px 10px; background: transparent; border: 1.5px solid #E0B0A0; border-radius: 6px; font-size: 12px; color: var(--red); cursor: pointer; }
+  .delete-btn:hover { background: var(--red); color: #fff; }
+  .size-overlay { position: fixed; inset: 0; background: rgba(26,18,9,0.5); z-index: 300; display: flex; align-items: flex-end; animation: fadeIn .2s; }
+  .size-drawer { background: var(--surface); border-radius: 20px 20px 0 0; width: 100%; padding: 0 20px 32px; animation: slideUp .25s cubic-bezier(.4,0,.2,1); }
+  .size-item-name { font-size: 18px; font-weight: 900; margin-bottom: 16px; }
+  .size-options { display: flex; flex-direction: column; gap: 10px; }
+  .size-btn { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-radius: var(--radius); border: 1.5px solid var(--border); background: var(--bg); cursor: pointer; transition: all .15s; }
+  .size-btn:hover { border-color: var(--red); background: #FFF0EB; }
+  .size-btn-label { font-size: 16px; font-weight: 700; }
+  .size-btn-price { font-size: 15px; font-weight: 700; color: var(--red); font-family: 'Space Mono', monospace; }
+  .cancel-btn { width: 100%; margin-top: 12px; padding: 14px; background: transparent; border: 1.5px solid var(--border); border-radius: var(--radius); font-size: 15px; font-weight: 700; color: var(--ink-3); cursor: pointer; }
 `;
 
 export default function App() {
   const shopId = window.location.pathname.split("/")[2];
   const [view, setView] = useState("customer");
   const [menu, setMenu] = useState([]);
-  const [cart, setCart] = useState({});
+  const [cart, setCart] = useState([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [orders, setOrders] = useState([]);
   const [success, setSuccess] = useState(null);
@@ -133,6 +150,9 @@ export default function App() {
   const [adminAuth, setAdminAuth] = useState(false);
   const [shopName, setShopName] = useState("");
   const [note, setNote] = useState("");
+  const [sizeItem, setSizeItem] = useState(null); // 正在選規格的品項
+  const [newItem, setNewItem] = useState({ name: "", price: "", category: "主食" });
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const uploadImage = async (file, itemId) => {
     const imageRef = ref(storage, `shops/${shopId}/menu/${itemId}`);
@@ -145,9 +165,7 @@ export default function App() {
     if (!shopId) return;
     const shopRef = doc(db, "shops", shopId);
     const unsubscribe = onSnapshot(shopRef, (snapshot) => {
-      if (snapshot.exists()) {
-        setShopName(snapshot.data().name || shopId);
-      }
+      if (snapshot.exists()) setShopName(snapshot.data().name || shopId);
     });
     return () => unsubscribe();
   }, [shopId]);
@@ -156,10 +174,13 @@ export default function App() {
     if (!shopId) return;
     const menuRef = collection(db, "shops", shopId, "menu");
     const unsubscribe = onSnapshot(menuRef, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
+      const data = snapshot.docs.map(d => {
+        const item = { id: d.id, ...d.data() };
+        if (typeof item.sizes === "string") {
+          try { item.sizes = JSON.parse(item.sizes); } catch { item.sizes = []; }
+  }
+      return item;
+});
       setMenu(data);
     });
     return () => unsubscribe();
@@ -169,60 +190,70 @@ export default function App() {
     if (!shopId) return;
     const q = query(collection(db, "shops", shopId, "orders"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        firestoreId: doc.id,
-        ...doc.data(),
-        time: doc.data().createdAt?.toDate() || new Date(),
+      const data = snapshot.docs.map(d => ({
+        firestoreId: d.id, ...d.data(),
+        time: d.data().createdAt?.toDate() || new Date(),
       }));
       setOrders(data);
     });
     return () => unsubscribe();
   }, [shopId]);
 
-  const addItem = useCallback((id) => {
-    setCart(c => ({ ...c, [id]: (c[id] || 0) + 1 }));
+  // cart 現在是陣列，每個元素是 { cartKey, id, name, price, size, qty }
+  // cartKey = id + (size ? "-" + size : "") 讓同品項不同規格分開計算
+
+  const addToCart = useCallback((item, size = null) => {
+    const price = size ? size.price : item.price;
+    const cartKey = item.id + (size ? `-${size.label}` : "");
+    const name = item.name + (size ? `（${size.label}）` : "");
+    setCart(c => {
+      const idx = c.findIndex(x => x.cartKey === cartKey);
+      if (idx >= 0) {
+        const n = [...c];
+        n[idx] = { ...n[idx], qty: n[idx].qty + 1 };
+        return n;
+      }
+      return [...c, { cartKey, id: item.id, name, price, emoji: item.emoji || "🍽", qty: 1 }];
+    });
   }, []);
 
-  const removeItem = useCallback((id) => {
+  const removeFromCart = useCallback((cartKey) => {
     setCart(c => {
-      const n = { ...c };
-      if (n[id] <= 1) delete n[id]; else n[id]--;
+      const idx = c.findIndex(x => x.cartKey === cartKey);
+      if (idx < 0) return c;
+      const n = [...c];
+      if (n[idx].qty <= 1) n.splice(idx, 1);
+      else n[idx] = { ...n[idx], qty: n[idx].qty - 1 };
       return n;
     });
   }, []);
 
-  const cartCount = Object.values(cart).reduce((a, b) => a + b, 0);
-  const cartTotal = Object.entries(cart).reduce((sum, [id, qty]) => {
-    const item = menu.find(m => m.id === id);
-    return sum + (item ? item.price * qty : 0);
-  }, 0);
+  const handleAddClick = useCallback((item) => {
+    if (item.sizes && item.sizes.length > 0) {
+      setSizeItem(item); // 跳出規格選擇視窗
+    } else {
+      addToCart(item);
+    }
+  }, [addToCart]);
 
+  const cartCount = cart.reduce((a, b) => a + b.qty, 0);
+  const cartTotal = cart.reduce((sum, x) => sum + x.price * x.qty, 0);
   const filteredMenu = category === "全部" ? menu : menu.filter(m => m.category === category);
 
   const submitOrder = async () => {
     if (cartCount === 0) return;
-
-    // 計算今天的訂單數量當作號碼
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const todayOrders = orders.filter(o => o.time >= startOfDay);
     const orderNumber = todayOrders.length + 1;
-
-    const items = Object.entries(cart).map(([id, qty]) => {
-      const item = menu.find(m => m.id === id);
-      return { id: item.id, name: item.name, price: item.price, emoji: item.emoji || "🍽", qty };
-    });
-
+    const items = cart.map(x => ({
+      id: x.id, name: x.name, price: x.price, emoji: x.emoji, qty: x.qty
+    }));
     await addDoc(collection(db, "shops", shopId, "orders"), {
-      items,
-      total: cartTotal,
-      status: "pending",
-      note: note || "",
-      orderNumber,
-      createdAt: serverTimestamp(),
+      items, total: cartTotal, status: "pending",
+      note: note || "", orderNumber, createdAt: serverTimestamp(),
     });
-
-    setCart({});
+    setCart([]);
     setNote("");
     setCartOpen(false);
     setSuccess(orderNumber);
@@ -233,9 +264,22 @@ export default function App() {
   };
 
   const toggleAvailable = async (item) => {
-    await updateDoc(doc(db, "shops", shopId, "menu", item.id), {
-      available: !item.available,
+    await updateDoc(doc(db, "shops", shopId, "menu", item.id), { available: !item.available });
+  };
+
+  const addMenuItem = async () => {
+    if (!newItem.name || !newItem.price) return;
+    await addDoc(collection(db, "shops", shopId, "menu"), {
+      name: newItem.name, price: Number(newItem.price),
+      category: newItem.category, available: true,
     });
+    setNewItem({ name: "", price: "", category: "主食" });
+    setShowAddForm(false);
+  };
+
+  const deleteMenuItem = async (itemId) => {
+    if (!window.confirm("確定要刪除這個品項嗎？")) return;
+    await deleteDoc(doc(db, "shops", shopId, "menu", itemId));
   };
 
   const handleLogout = () => {
@@ -292,29 +336,73 @@ export default function App() {
                   {menu.length === 0 ? (
                     <div className="empty-state"><p>🍽</p><span>菜單載入中...</span></div>
                   ) : (
-                    filteredMenu.map(item => (
-                      <div key={item.id} className={`menu-item ${!item.available ? "unavail" : ""}`}>
-                        {item.image
-                          ? <img src={item.image} style={{width:48, height:48, borderRadius:8, objectFit:"cover"}} />
-                          : <div className="menu-emoji">{item.emoji || "🍽"}</div>
-                        }
-                        <div className="menu-info">
-                          <div className="menu-name">{item.name}</div>
-                          <div className="menu-price">NT$ {item.price}</div>
-                          <span className="menu-tag">{item.category}</span>
-                          {!item.available && <span className="menu-tag" style={{marginLeft:4,borderColor:"#D0421B",color:"#D0421B"}}>售完</span>}
-                        </div>
-                        {item.available && (
-                          <div className="qty-ctrl">
-                            <button className="qty-btn" onClick={() => removeItem(item.id)}>−</button>
-                            <span className="qty-num">{cart[item.id] || 0}</span>
-                            <button className="qty-btn" onClick={() => addItem(item.id)}>＋</button>
+                    filteredMenu.map(item => {
+                      const itemQty = cart.filter(x => x.id === item.id).reduce((a, b) => a + b.qty, 0);
+                      return (
+                        <div key={item.id} className={`menu-item ${!item.available ? "unavail" : ""}`}>
+                          {item.image
+                            ? <img src={item.image} style={{width:48, height:48, borderRadius:8, objectFit:"cover"}} />
+                            : <div className="menu-emoji">{item.emoji || "🍽"}</div>
+                          }
+                          <div className="menu-info">
+                            <div className="menu-name">{item.name}</div>
+                            <div className="menu-price">
+                              {item.sizes && item.sizes.length > 0
+                                ? `NT$ ${item.sizes[0].price} 起`
+                                : `NT$ ${item.price}`
+                              }
+                            </div>
+                            <span className="menu-tag">{item.category}</span>
+                            {item.sizes && item.sizes.length > 0 && (
+                              <span className="menu-tag" style={{marginLeft:4, borderColor:"var(--gold)", color:"var(--gold)"}}>可選大小</span>
+                            )}
+                            {!item.available && <span className="menu-tag" style={{marginLeft:4,borderColor:"#D0421B",color:"#D0421B"}}>售完</span>}
                           </div>
-                        )}
-                      </div>
-                    ))
+                          {item.available && (
+                            <div className="qty-ctrl">
+                              <button className="qty-btn" onClick={() => {
+                                if (item.sizes && item.sizes.length > 0) {
+                                  setSizeItem(item);
+                                } else {
+                                  removeFromCart(item.id);
+                                }
+                              }}>−</button>
+                              <span className="qty-num">{itemQty}</span>
+                              <button className="qty-btn" onClick={() => handleAddClick(item)}>＋</button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
+
+                {/* 規格選擇視窗 */}
+                {sizeItem && (
+                  <div className="size-overlay" onClick={(e) => e.target === e.currentTarget && setSizeItem(null)}>
+                    <div className="size-drawer">
+                      <div className="drawer-handle"/>
+                      <div className="size-item-name">{sizeItem.name}</div>
+                      <div className="size-options">
+                        {sizeItem.sizes.map(size => (
+                          <div
+                            key={size.label}
+                            className="size-btn"
+                            onClick={() => {
+                              addToCart(sizeItem, size);
+                              setSizeItem(null);
+                            }}
+                          >
+                            <span className="size-btn-label">{size.label}</span>
+                            <span className="size-btn-price">NT$ {size.price}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <button className="cancel-btn" onClick={() => setSizeItem(null)}>取消</button>
+                    </div>
+                  </div>
+                )}
+
                 {cartCount > 0 && (
                   <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:150,width:"calc(100% - 32px)",maxWidth:448}}>
                     <button className="submit-btn" onClick={() => setCartOpen(true)}>
@@ -327,16 +415,12 @@ export default function App() {
                     <div className="cart-drawer">
                       <div className="drawer-handle"/>
                       <div className="drawer-title">確認訂單</div>
-                      {Object.entries(cart).map(([id, qty]) => {
-                        const item = menu.find(m => m.id === id);
-                        if (!item) return null;
-                        return (
-                          <div key={id} className="cart-row">
-                            <div className="cart-row-name">{item.emoji || "🍽"} {item.name} × {qty}</div>
-                            <div className="cart-row-price">NT$ {item.price * qty}</div>
-                          </div>
-                        );
-                      })}
+                      {cart.map(x => (
+                        <div key={x.cartKey} className="cart-row">
+                          <div className="cart-row-name">{x.emoji} {x.name} × {x.qty}</div>
+                          <div className="cart-row-price">NT$ {x.price * x.qty}</div>
+                        </div>
+                      ))}
                       <div className="cart-total">
                         <span>合計</span>
                         <span>NT$ {cartTotal}</span>
@@ -386,6 +470,7 @@ export default function App() {
                   <div className={`tab ${adminTab === "history" ? "active" : ""}`} onClick={() => setAdminTab("history")}>歷史</div>
                   <div className={`tab ${adminTab === "qrcode" ? "active" : ""}`} onClick={() => setAdminTab("qrcode")}>QR Code</div>
                 </div>
+
                 {adminTab === "orders" && (
                   <>
                     {pendingOrders.length === 0 ? (
@@ -408,9 +493,7 @@ export default function App() {
                                 </div>
                               ))}
                             </div>
-                            {order.note && (
-                              <div className="order-note">📝 {order.note}</div>
-                            )}
+                            {order.note && <div className="order-note">📝 {order.note}</div>}
                             <div className="order-card-foot">
                               <div className="order-total">合計 <span>NT$ {order.total}</span></div>
                               <button className="done-btn" onClick={() => markDone(order.firestoreId)}>✓ 完成</button>
@@ -421,9 +504,37 @@ export default function App() {
                     )}
                   </>
                 )}
+
                 {adminTab === "menu" && (
                   <>
-                    <div className="section-title">菜單品項</div>
+                    <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 16px 4px"}}>
+                      <div className="section-title" style={{padding:0}}>菜單品項</div>
+                      <button className="add-btn" onClick={() => setShowAddForm(v => !v)} style={{fontSize:13}}>
+                        {showAddForm ? "取消" : "＋ 新增品項"}
+                      </button>
+                    </div>
+                    {showAddForm && (
+                      <div className="add-item-form">
+                        <input
+                          placeholder="品項名稱（例如：滷肉飯）"
+                          value={newItem.name}
+                          onChange={e => setNewItem(v => ({...v, name: e.target.value}))}
+                        />
+                        <input
+                          placeholder="價格（例如：40）"
+                          type="number"
+                          value={newItem.price}
+                          onChange={e => setNewItem(v => ({...v, price: e.target.value}))}
+                        />
+                        <select
+                          value={newItem.category}
+                          onChange={e => setNewItem(v => ({...v, category: e.target.value}))}
+                        >
+                          {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <button className="add-btn" onClick={addMenuItem}>新增</button>
+                      </div>
+                    )}
                     {menu.map(item => (
                       <div key={item.id} className="menu-admin-item">
                         {item.image
@@ -432,9 +543,14 @@ export default function App() {
                         }
                         <div className="menu-admin-info">
                           <div className="menu-admin-name">{item.name}</div>
-                          <div className="menu-admin-price">NT$ {item.price} · {item.category}</div>
+                          <div className="menu-admin-price">
+                            {item.sizes && item.sizes.length > 0
+                              ? item.sizes.map(s => `${s.label} NT$${s.price}`).join(" / ")
+                              : `NT$ ${item.price}`
+                            } · {item.category}
+                          </div>
                         </div>
-                        <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:4}}>
+                        <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:6}}>
                           <label className="toggle">
                             <input type="checkbox" checked={item.available ?? true} onChange={() => toggleAvailable(item)} />
                             <div className="toggle-track"/>
@@ -442,20 +558,17 @@ export default function App() {
                           </label>
                           <label style={{fontSize:11, color:"var(--ink-3)", cursor:"pointer"}}>
                             📷
-                            <input
-                              type="file"
-                              accept="image/*"
-                              style={{display:"none"}}
-                              onChange={(e) => {
-                                if (e.target.files[0]) uploadImage(e.target.files[0], item.id);
-                              }}
+                            <input type="file" accept="image/*" style={{display:"none"}}
+                              onChange={(e) => { if (e.target.files[0]) uploadImage(e.target.files[0], item.id); }}
                             />
                           </label>
+                          <button className="delete-btn" onClick={() => deleteMenuItem(item.id)}>刪除</button>
                         </div>
                       </div>
                     ))}
                   </>
                 )}
+
                 {adminTab === "history" && (
                   <>
                     {doneOrders.length === 0 ? (
@@ -478,9 +591,7 @@ export default function App() {
                                 </div>
                               ))}
                             </div>
-                            {order.note && (
-                              <div className="order-note">📝 {order.note}</div>
-                            )}
+                            {order.note && <div className="order-note">📝 {order.note}</div>}
                             <div className="order-card-foot">
                               <div className="order-total">合計 <span>NT$ {order.total}</span></div>
                               <span className="done-label">✓ 已完成</span>
@@ -491,6 +602,7 @@ export default function App() {
                     )}
                   </>
                 )}
+
                 {adminTab === "qrcode" && (
                   <div style={{padding:24,display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
                     <div className="section-title" style={{alignSelf:"flex-start"}}>點餐QR Code</div>
@@ -498,6 +610,7 @@ export default function App() {
                     <div style={{fontSize:13,color:"#8C7355",textAlign:"center"}}>印出來貼在桌上，客人掃描即可點餐</div>
                   </div>
                 )}
+
                 <button className="logout-btn" onClick={handleLogout}>登出後台</button>
               </div>
         )}
