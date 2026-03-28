@@ -150,8 +150,8 @@ export default function App() {
   const [adminAuth, setAdminAuth] = useState(false);
   const [shopName, setShopName] = useState("");
   const [note, setNote] = useState("");
-  const [sizeItem, setSizeItem] = useState(null); // 正在選規格的品項
-  const [newItem, setNewItem] = useState({ name: "", price: "", category: "主食" });
+  const [sizeItem, setSizeItem] = useState(null);
+  const [newItem, setNewItem] = useState({ name: "", price: "", category: "主食", hasSizes: false, sizeSmallPrice: "", sizeLargePrice: "" });
   const [showAddForm, setShowAddForm] = useState(false);
 
   const uploadImage = async (file, itemId) => {
@@ -178,9 +178,9 @@ export default function App() {
         const item = { id: d.id, ...d.data() };
         if (typeof item.sizes === "string") {
           try { item.sizes = JSON.parse(item.sizes); } catch { item.sizes = []; }
-  }
-      return item;
-});
+        }
+        return item;
+      });
       setMenu(data);
     });
     return () => unsubscribe();
@@ -198,9 +198,6 @@ export default function App() {
     });
     return () => unsubscribe();
   }, [shopId]);
-
-  // cart 現在是陣列，每個元素是 { cartKey, id, name, price, size, qty }
-  // cartKey = id + (size ? "-" + size : "") 讓同品項不同規格分開計算
 
   const addToCart = useCallback((item, size = null) => {
     const price = size ? size.price : item.price;
@@ -230,7 +227,7 @@ export default function App() {
 
   const handleAddClick = useCallback((item) => {
     if (item.sizes && item.sizes.length > 0) {
-      setSizeItem(item); // 跳出規格選擇視窗
+      setSizeItem(item);
     } else {
       addToCart(item);
     }
@@ -268,12 +265,23 @@ export default function App() {
   };
 
   const addMenuItem = async () => {
-    if (!newItem.name || !newItem.price) return;
-    await addDoc(collection(db, "shops", shopId, "menu"), {
-      name: newItem.name, price: Number(newItem.price),
-      category: newItem.category, available: true,
-    });
-    setNewItem({ name: "", price: "", category: "主食" });
+    if (!newItem.name) return;
+    if (newItem.hasSizes && (!newItem.sizeSmallPrice || !newItem.sizeLargePrice)) return;
+    if (!newItem.hasSizes && !newItem.price) return;
+    const data = {
+      name: newItem.name,
+      category: newItem.category,
+      available: true,
+      price: newItem.hasSizes ? Number(newItem.sizeSmallPrice) : Number(newItem.price),
+    };
+    if (newItem.hasSizes) {
+      data.sizes = [
+        { label: "小", price: Number(newItem.sizeSmallPrice) },
+        { label: "大", price: Number(newItem.sizeLargePrice) },
+      ];
+    }
+    await addDoc(collection(db, "shops", shopId, "menu"), data);
+    setNewItem({ name: "", price: "", category: "主食", hasSizes: false, sizeSmallPrice: "", sizeLargePrice: "" });
     setShowAddForm(false);
   };
 
@@ -377,7 +385,6 @@ export default function App() {
                   )}
                 </div>
 
-                {/* 規格選擇視窗 */}
                 {sizeItem && (
                   <div className="size-overlay" onClick={(e) => e.target === e.currentTarget && setSizeItem(null)}>
                     <div className="size-drawer">
@@ -385,13 +392,8 @@ export default function App() {
                       <div className="size-item-name">{sizeItem.name}</div>
                       <div className="size-options">
                         {sizeItem.sizes.map(size => (
-                          <div
-                            key={size.label}
-                            className="size-btn"
-                            onClick={() => {
-                              addToCart(sizeItem, size);
-                              setSizeItem(null);
-                            }}
+                          <div key={size.label} className="size-btn"
+                            onClick={() => { addToCart(sizeItem, size); setSizeItem(null); }}
                           >
                             <span className="size-btn-label">{size.label}</span>
                             <span className="size-btn-price">NT$ {size.price}</span>
@@ -516,15 +518,9 @@ export default function App() {
                     {showAddForm && (
                       <div className="add-item-form">
                         <input
-                          placeholder="品項名稱（例如：滷肉飯）"
+                          placeholder="品項名稱（例如：陽春麵）"
                           value={newItem.name}
                           onChange={e => setNewItem(v => ({...v, name: e.target.value}))}
-                        />
-                        <input
-                          placeholder="價格（例如：40）"
-                          type="number"
-                          value={newItem.price}
-                          onChange={e => setNewItem(v => ({...v, price: e.target.value}))}
                         />
                         <select
                           value={newItem.category}
@@ -532,6 +528,37 @@ export default function App() {
                         >
                           {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
+                        <label style={{display:"flex", alignItems:"center", gap:8, fontSize:14, color:"var(--ink)"}}>
+                          <input
+                            type="checkbox"
+                            checked={newItem.hasSizes}
+                            onChange={e => setNewItem(v => ({...v, hasSizes: e.target.checked}))}
+                          />
+                          有大小選擇
+                        </label>
+                        {newItem.hasSizes ? (
+                          <>
+                            <input
+                              placeholder="小碗價格（例如：45）"
+                              type="number"
+                              value={newItem.sizeSmallPrice}
+                              onChange={e => setNewItem(v => ({...v, sizeSmallPrice: e.target.value}))}
+                            />
+                            <input
+                              placeholder="大碗價格（例如：65）"
+                              type="number"
+                              value={newItem.sizeLargePrice}
+                              onChange={e => setNewItem(v => ({...v, sizeLargePrice: e.target.value}))}
+                            />
+                          </>
+                        ) : (
+                          <input
+                            placeholder="價格（例如：40）"
+                            type="number"
+                            value={newItem.price}
+                            onChange={e => setNewItem(v => ({...v, price: e.target.value}))}
+                          />
+                        )}
                         <button className="add-btn" onClick={addMenuItem}>新增</button>
                       </div>
                     )}

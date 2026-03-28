@@ -27,7 +27,7 @@ const menu = [
   { name: "切仔米粉（湯）", price: 45, category: "主食", available: true, sizes: [{label:"小", price:45},{label:"大", price:65}] },
   { name: "餡餃麵（乾）", price: 65, category: "主食", available: true, sizes: [{label:"小", price:65},{label:"大", price:85}] },
   { name: "餡餃麵（湯）", price: 65, category: "主食", available: true, sizes: [{label:"小", price:65},{label:"大", price:85}] },
-  { name: "貢丸麵（乾）", price: 65, category: "主食", available: true, sizes: [{label:"小", price:65},{label:"大", price:85}] },
+  { name: "貢丸麵（乾）"3, price: 65, category: "主食", available: true, sizes: [{label:"小", price:65},{label:"大", price:85}] },
   { name: "貢丸麵（湯）", price: 65, category: "主食", available: true, sizes: [{label:"小", price:65},{label:"大", price:85}] },
   { name: "紅燒排骨麵", price: 85, category: "主食", available: true, sizes: [{label:"小", price:85},{label:"大", price:105}] },
   { name: "蛤蠣麵", price: 85, category: "主食", available: true, sizes: [{label:"小", price:85},{label:"大", price:105}] },
