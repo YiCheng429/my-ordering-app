@@ -3,12 +3,10 @@ import AdminLogin from "./AdminLogin";
 import { db } from "./firebase";
 import {
   collection,
-  addDoc,
   onSnapshot,
   updateDoc,
   deleteDoc,
   doc,
-  serverTimestamp,
   query,
   orderBy,
 } from "firebase/firestore";
@@ -18,8 +16,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const FONT = `@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap');`;
 
-const CATEGORIES = ["全部", "主食", "小菜", "湯品", "飲料"];
-const CATEGORY_OPTIONS = ["主食", "小菜", "湯品", "飲料"];
+const DEFAULT_CATEGORIES = ["主食", "小菜", "湯品", "飲料"];
 const FONT_OPTIONS = [
   { label: "思源黑體（現代簡潔）", value: "Noto+Sans+TC" },
   { label: "思源宋體（古早傳統）", value: "Noto+Serif+TC" },
@@ -163,6 +160,10 @@ export default function App() {
   const [sizeItem, setSizeItem] = useState(null);
   const [newItem, setNewItem] = useState({ name: "", price: "", category: "主食", hasSizes: false, sizeSmallPrice: "", sizeLargePrice: "" });
   const [showAddForm, setShowAddForm] = useState(false);
+  const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  const [adminCatFilter, setAdminCatFilter] = useState("全部");
+  const [newCatName, setNewCatName] = useState("");
+  const [showAddCat, setShowAddCat] = useState(false);
   const [editingName, setEditingName] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [shopFont, setShopFont] = useState("Noto+Sans+TC");
@@ -182,6 +183,9 @@ export default function App() {
       if (snapshot.exists()) {
         setShopName(snapshot.data().name || shopId);
         setShopFont(snapshot.data().fontFamily || "Noto+Sans+TC");
+        // 從 Firestore 讀取分類，沒有就用預設
+        const saved = snapshot.data().categories;
+        if (saved && saved.length > 0) setCategories(saved);
       }
     });
     return () => unsubscribe();
@@ -277,14 +281,23 @@ export default function App() {
     const items = cart.map(x => ({
       id: x.id, name: x.name, price: x.price, emoji: x.emoji, qty: x.qty
     }));
-    await addDoc(collection(db, "shops", shopId, "orders"), {
-      items, total: cartTotal, status: "pending",
-      note: note || "", orderNumber, createdAt: serverTimestamp(),
-    });
-    setCart([]);
-    setNote("");
-    setCartOpen(false);
-    setSuccess(orderNumber);
+    try {
+      const res = await fetch(
+        `https://my-ordering-app-production.up.railway.app/api/order/${shopId}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items, total: cartTotal, note: note || "", orderNumber }),
+        }
+      );
+      if (!res.ok) throw new Error("送單失敗");
+      setCart([]);
+      setNote("");
+      setCartOpen(false);
+      setSuccess(orderNumber);
+    } catch (err) {
+      alert("送單失敗，請重試");
+    }
   };
 
   const markDone = async (firestoreId) => {
@@ -319,6 +332,30 @@ export default function App() {
   const deleteMenuItem = async (itemId) => {
     if (!window.confirm("確定要刪除這個品項嗎？")) return;
     await deleteDoc(doc(db, "shops", shopId, "menu", itemId));
+  };
+
+  const addCategory = async () => {
+    const name = newCatName.trim();
+    if (!name || categories.includes(name)) return;
+    const updated = [...categories, name];
+    setCategories(updated);
+    await updateDoc(doc(db, "shops", shopId), { categories: updated });
+    setNewCatName("");
+    setShowAddCat(false);
+    // 讓新品項預設選到剛建的分類
+    setNewItem(v => ({ ...v, category: name }));
+  };
+
+  const deleteCategory = async (cat) => {
+    const inUse = menu.some(item => item.category === cat);
+    if (inUse) {
+      alert(`「${cat}」底下還有品項，請先移除品項再刪除分類`);
+      return;
+    }
+    if (!window.confirm(`確定刪除分類「${cat}」？`)) return;
+    const updated = categories.filter(c => c !== cat);
+    setCategories(updated);
+    await updateDoc(doc(db, "shops", shopId), { categories: updated });
   };
 
   const saveShopName = async () => {
@@ -374,7 +411,7 @@ export default function App() {
             ) : (
               <>
                 <div className="cat-scroll">
-                  {CATEGORIES.map(c => (
+                  {["全部", ...categories].map(c => (
                     <button key={c} className={`cat-btn ${category === c ? "active" : ""}`} onClick={() => setCategory(c)}>{c}</button>
                   ))}
                 </div>
@@ -548,12 +585,46 @@ export default function App() {
 
                 {adminTab === "menu" && (
                   <>
+                    {/* 頂部：新增品項按鈕 */}
                     <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 16px 4px"}}>
                       <div className="section-title" style={{padding:0}}>菜單品項</div>
                       <button className="add-btn" onClick={() => setShowAddForm(v => !v)} style={{fontSize:13}}>
                         {showAddForm ? "取消" : "＋ 新增品項"}
                       </button>
                     </div>
+
+                    {/* 分類篩選列 */}
+                    <div className="cat-scroll" style={{padding:"8px 16px"}}>
+                      {["全部", ...categories].map(c => (
+                        <button
+                          key={c}
+                          className={`cat-btn ${adminCatFilter === c ? "active" : ""}`}
+                          onClick={() => setAdminCatFilter(c)}
+                        >{c}</button>
+                      ))}
+                      <button
+                        className="cat-btn"
+                        onClick={() => setShowAddCat(v => !v)}
+                        style={{borderStyle:"dashed", color:"var(--ink-3)"}}
+                      >＋ 新增分類</button>
+                    </div>
+
+                    {/* 新增分類輸入框 */}
+                    {showAddCat && (
+                      <div style={{display:"flex", gap:8, padding:"0 16px 8px"}}>
+                        <input
+                          className="settings-input"
+                          placeholder="輸入新分類名稱（例如：甜點）"
+                          value={newCatName}
+                          onChange={e => setNewCatName(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && addCategory()}
+                          style={{flex:1}}
+                        />
+                        <button className="add-btn" onClick={addCategory} style={{whiteSpace:"nowrap"}}>新增</button>
+                      </div>
+                    )}
+
+                    {/* 新增品項表單 */}
                     {showAddForm && (
                       <div className="add-item-form">
                         <input
@@ -565,7 +636,7 @@ export default function App() {
                           value={newItem.category}
                           onChange={e => setNewItem(v => ({...v, category: e.target.value}))}
                         >
-                          {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                          {categories.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                         <label style={{display:"flex", alignItems:"center", gap:8, fontSize:14, color:"var(--ink)"}}>
                           <input
@@ -601,37 +672,116 @@ export default function App() {
                         <button className="add-btn" onClick={addMenuItem}>新增</button>
                       </div>
                     )}
-                    {menu.map(item => (
-                      <div key={item.id} className="menu-admin-item">
-                        {item.image
-                          ? <img src={item.image} style={{width:48, height:48, borderRadius:8, objectFit:"cover"}} />
-                          : <span style={{fontSize:24}}>🍽</span>
-                        }
-                        <div className="menu-admin-info">
-                          <div className="menu-admin-name">{item.name}</div>
-                          <div className="menu-admin-price">
-                            {item.sizes && item.sizes.length > 0
-                              ? item.sizes.map(s => `${s.label} NT$${s.price}`).join(" / ")
-                              : `NT$ ${item.price}`
-                            } · {item.category}
-                          </div>
-                        </div>
-                        <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:6}}>
-                          <label className="toggle">
-                            <input type="checkbox" checked={item.available ?? true} onChange={() => toggleAvailable(item)} />
-                            <div className="toggle-track"/>
-                            <div className="toggle-thumb"/>
-                          </label>
-                          <label style={{fontSize:11, color:"var(--ink-3)", cursor:"pointer"}}>
-                            📷
-                            <input type="file" accept="image/*" style={{display:"none"}}
-                              onChange={(e) => { if (e.target.files[0]) uploadImage(e.target.files[0], item.id); }}
-                            />
-                          </label>
-                          <button className="delete-btn" onClick={() => deleteMenuItem(item.id)}>刪除</button>
-                        </div>
-                      </div>
-                    ))}
+
+                    {/* 品項列表：依分類分組 */}
+                    {(() => {
+                      const visibleCats = adminCatFilter === "全部" ? categories : [adminCatFilter];
+                      // 有分類的品項
+                      const grouped = visibleCats.map(cat => ({
+                        cat,
+                        items: menu.filter(item => item.category === cat),
+                      }));
+                      // 沒有對應分類的品項（舊資料）
+                      const uncategorized = menu.filter(item => !categories.includes(item.category));
+                      return (
+                        <>
+                          {grouped.map(({ cat, items }) => (
+                            <div key={cat}>
+                              <div style={{
+                                display:"flex", alignItems:"center", justifyContent:"space-between",
+                                padding:"10px 16px 4px"
+                              }}>
+                                <div style={{
+                                  fontSize:12, fontWeight:700, color:"var(--ink-3)",
+                                  textTransform:"uppercase", letterSpacing:1
+                                }}>
+                                  {cat}
+                                  <span style={{
+                                    marginLeft:6, background:"var(--border)", borderRadius:99,
+                                    padding:"1px 7px", fontSize:11, fontWeight:700, color:"var(--ink-3)"
+                                  }}>{items.length}</span>
+                                </div>
+                                <button
+                                  onClick={() => deleteCategory(cat)}
+                                  style={{
+                                    fontSize:11, color:"var(--ink-3)", background:"none",
+                                    border:"none", cursor:"pointer", padding:"2px 6px"
+                                  }}
+                                >刪除分類</button>
+                              </div>
+                              {items.length === 0 ? (
+                                <div style={{padding:"8px 16px 4px", fontSize:13, color:"var(--ink-3)"}}>此分類尚無品項</div>
+                              ) : (
+                                items.map(item => (
+                                  <div key={item.id} className="menu-admin-item">
+                                    {item.image
+                                      ? <img src={item.image} style={{width:48, height:48, borderRadius:8, objectFit:"cover"}} />
+                                      : <span style={{fontSize:24}}>🍽</span>
+                                    }
+                                    <div className="menu-admin-info">
+                                      <div className="menu-admin-name">{item.name}</div>
+                                      <div className="menu-admin-price">
+                                        {item.sizes && item.sizes.length > 0
+                                          ? item.sizes.map(s => `${s.label} NT$${s.price}`).join(" / ")
+                                          : `NT$ ${item.price}`
+                                        } · {item.category}
+                                      </div>
+                                    </div>
+                                    <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:6}}>
+                                      <label className="toggle">
+                                        <input type="checkbox" checked={item.available ?? true} onChange={() => toggleAvailable(item)} />
+                                        <div className="toggle-track"/>
+                                        <div className="toggle-thumb"/>
+                                      </label>
+                                      <label style={{fontSize:11, color:"var(--ink-3)", cursor:"pointer"}}>
+                                        📷
+                                        <input type="file" accept="image/*" style={{display:"none"}}
+                                          onChange={(e) => { if (e.target.files[0]) uploadImage(e.target.files[0], item.id); }}
+                                        />
+                                      </label>
+                                      <button className="delete-btn" onClick={() => deleteMenuItem(item.id)}>刪除</button>
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          ))}
+                          {uncategorized.length > 0 && adminCatFilter === "全部" && (
+                            <div>
+                              <div style={{padding:"10px 16px 4px", fontSize:12, fontWeight:700, color:"var(--ink-3)", letterSpacing:1}}>
+                                未分類 <span style={{marginLeft:6, background:"var(--border)", borderRadius:99, padding:"1px 7px", fontSize:11}}>{uncategorized.length}</span>
+                              </div>
+                              {uncategorized.map(item => (
+                                <div key={item.id} className="menu-admin-item">
+                                  {item.image
+                                    ? <img src={item.image} style={{width:48, height:48, borderRadius:8, objectFit:"cover"}} />
+                                    : <span style={{fontSize:24}}>🍽</span>
+                                  }
+                                  <div className="menu-admin-info">
+                                    <div className="menu-admin-name">{item.name}</div>
+                                    <div className="menu-admin-price">NT$ {item.price} · {item.category || "未分類"}</div>
+                                  </div>
+                                  <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:6}}>
+                                    <label className="toggle">
+                                      <input type="checkbox" checked={item.available ?? true} onChange={() => toggleAvailable(item)} />
+                                      <div className="toggle-track"/>
+                                      <div className="toggle-thumb"/>
+                                    </label>
+                                    <label style={{fontSize:11, color:"var(--ink-3)", cursor:"pointer"}}>
+                                      📷
+                                      <input type="file" accept="image/*" style={{display:"none"}}
+                                        onChange={(e) => { if (e.target.files[0]) uploadImage(e.target.files[0], item.id); }}
+                                      />
+                                    </label>
+                                    <button className="delete-btn" onClick={() => deleteMenuItem(item.id)}>刪除</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </>
                 )}
 
