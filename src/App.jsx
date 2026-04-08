@@ -534,7 +534,7 @@ export default function App() {
 
         {view === "admin" && (
           !adminAuth
-            ? <AdminLogin onLogin={() => setAdminAuth(true)} />
+            ? <AdminLogin shopId={shopId} onLogin={() => setAdminAuth(true)} />
             : <div className="admin-wrap">
                 <div className="admin-header">
                   <h2>{shopName} 後台</h2>
