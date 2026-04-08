@@ -3,6 +3,7 @@ import AdminLogin from "./AdminLogin";
 import { db } from "./firebase";
 import {
   collection,
+  addDoc,
   onSnapshot,
   updateDoc,
   deleteDoc,
