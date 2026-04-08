@@ -146,6 +146,7 @@ const styles = `
 
 export default function App() {
   const shopId = window.location.pathname.split("/")[2];
+  const tableNumber = new URLSearchParams(window.location.search).get("table") || null;
   const [view, setView] = useState("customer");
   const [menu, setMenu] = useState([]);
   const [cart, setCart] = useState([]);
@@ -168,6 +169,8 @@ export default function App() {
   const [savingName, setSavingName] = useState(false);
   const [shopFont, setShopFont] = useState("Noto+Sans+TC");
   const [savingFont, setSavingFont] = useState(false);
+  const [tableCount, setTableCount] = useState(0);
+  const [savingTable, setSavingTable] = useState(false);
 
   const uploadImage = async (file, itemId) => {
     const imageRef = ref(storage, `shops/${shopId}/menu/${itemId}`);
@@ -186,6 +189,7 @@ export default function App() {
         // 從 Firestore 讀取分類，沒有就用預設
         const saved = snapshot.data().categories;
         if (saved && saved.length > 0) setCategories(saved);
+        setTableCount(snapshot.data().tableCount || 0);
       }
     });
     return () => unsubscribe();
@@ -287,7 +291,7 @@ export default function App() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items, total: cartTotal, note: note || "", orderNumber }),
+          body: JSON.stringify({ items, total: cartTotal, note: note || "", orderNumber, tableNumber }),
         }
       );
       if (!res.ok) throw new Error("送單失敗");
@@ -561,6 +565,11 @@ export default function App() {
                             <div className="order-card-head">
                               <span className="order-num">#{order.orderNumber}</span>
                               <span className="order-time">{formatTime(order.time)}</span>
+                              {order.tableNumber && (
+                                <span style={{fontSize:12, fontWeight:700, background:"#FFF3CD", color:"#856404", borderRadius:99, padding:"3px 10px"}}>
+                                  🪑 {order.tableNumber} 桌
+                                </span>
+                              )}
                               <span className="order-status status-pending">待處理</span>
                             </div>
                             <div className="order-items">
@@ -797,6 +806,11 @@ export default function App() {
                             <div className="order-card-head">
                               <span className="order-num">#{order.orderNumber}</span>
                               <span className="order-time">{formatTime(order.time)}</span>
+                              {order.tableNumber && (
+                                <span style={{fontSize:12, fontWeight:700, background:"#D1FAE5", color:"#065F46", borderRadius:99, padding:"3px 10px"}}>
+                                  🪑 {order.tableNumber} 桌
+                                </span>
+                              )}
                               <span className="order-status status-done">完成</span>
                             </div>
                             <div className="order-items">
@@ -820,10 +834,25 @@ export default function App() {
                 )}
 
                 {adminTab === "qrcode" && (
-                  <div style={{padding:24,display:"flex",flexDirection:"column",alignItems:"center",gap:16}}>
-                    <div className="section-title" style={{alignSelf:"flex-start"}}>點餐QR Code</div>
-                    <QRCode url={`https://my-ordering-app.vercel.app/shop/${shopId}`} />
-                    <div style={{fontSize:13,color:"#8C7355",textAlign:"center"}}>印出來貼在桌上，客人掃描即可點餐</div>
+                  <div style={{padding:24,display:"flex",flexDirection:"column",gap:16}}>
+                    <div className="section-title" style={{padding:0}}>桌號 QR Code</div>
+                    {tableCount === 0 ? (
+                      <div style={{textAlign:"center",padding:"24px 0",color:"var(--ink-3)",fontSize:14}}>
+                        請先到「設定」填入桌數，再來產生 QR Code
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{fontSize:13,color:"var(--ink-3)"}}>共 {tableCount} 桌，每張印出來貼在對應桌上</div>
+                        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                          {Array.from({length: tableCount}, (_, i) => i + 1).map(t => (
+                            <div key={t} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,background:"var(--surface)",borderRadius:12,border:"1.5px solid var(--border)",padding:16}}>
+                              <div style={{fontSize:13,fontWeight:700,color:"var(--ink-3)"}}>第 {t} 桌</div>
+                              <QRCode url={`https://my-ordering-app.vercel.app/shop/${shopId}?table=${t}`} />
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -842,6 +871,27 @@ export default function App() {
                       disabled={savingName}
                     >
                       {savingName ? "儲存中..." : "儲存"}
+                    </button>
+
+                    <div className="section-title" style={{padding:0, marginTop:8}}>桌數設定</div>
+                    <input
+                      className="settings-input"
+                      type="number"
+                      min="0"
+                      value={tableCount}
+                      onChange={e => setTableCount(Number(e.target.value))}
+                      placeholder="輸入桌數（例如：8）"
+                    />
+                    <button
+                      className="save-btn"
+                      onClick={async () => {
+                        setSavingTable(true);
+                        await updateDoc(doc(db, "shops", shopId), { tableCount });
+                        setSavingTable(false);
+                      }}
+                      disabled={savingTable}
+                    >
+                      {savingTable ? "儲存中..." : "儲存桌數"}
                     </button>
 
                     <div className="section-title" style={{padding:0, marginTop:8}}>前台字體</div>

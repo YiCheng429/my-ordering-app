@@ -73,7 +73,7 @@ app.get("/api/admin/test", verifyToken, (req, res) => {
 // 送單路由：前端改打這裡，後端抓 IP 後寫進 Firestore
 app.post("/api/order/:shopId", async (req, res) => {
   const { shopId } = req.params;
-  const { items, total, note, orderNumber } = req.body;
+  const { items, total, note, orderNumber, tableNumber } = req.body;
 
   // 驗證必要欄位
   if (!shopId || !items || !total) {
@@ -92,6 +92,7 @@ app.post("/api/order/:shopId", async (req, res) => {
       total,
       note: note || "",
       orderNumber,
+      tableNumber: tableNumber || null,
       status: "pending",
       clientIp,                            // 記錄 IP
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
