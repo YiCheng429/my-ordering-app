@@ -30,26 +30,94 @@ app.use(cors({
 }));
 app.use(express.json());                   // 允許接收JSON格式資料
 
-// 把管理員密碼加密存起來
-const ADMIN_PASSWORD_HASH = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10);
+// 為既有店家設定或更新密碼（需要舊密碼或是第一次設定）
+app.post("/api/set-password/:shopId", async (req, res) => {
+  const { shopId } = req.params;
+  const { password, masterKey } = req.body;
 
-// 登入路由
-app.post("/api/login", (req, res) => {
-  const { password } = req.body;           // 接收前端傳來的密碼
-
-  const isMatch = bcrypt.compareSync(password, ADMIN_PASSWORD_HASH); // 比對密碼
-
-  if (!isMatch) {
-    return res.status(401).json({ message: "密碼錯誤" }); // 錯誤回傳401
+  // 用 master key 保護，只有你知道
+  if (masterKey !== process.env.MASTER_KEY) {
+    return res.status(403).json({ message: "無權限" });
+  }
+  if (!password || password.length < 6) {
+    return res.status(400).json({ message: "密碼至少6個字元" });
   }
 
-  const token = jwt.sign(               // 密碼正確，產生token
-    { role: "admin" },
+  const passwordHash = bcrypt.hashSync(password, 10);
+  await db.collection("shops").doc(shopId).update({ passwordHash });
+  res.json({ success: true });
+});
+
+// 註冊新店家（需要 masterKey，只有你能建立）
+app.post("/api/register", async (req, res) => {
+  const { shopId, name, password, masterKey } = req.body;
+
+  // 驗證 masterKey
+  if (masterKey !== process.env.MASTER_KEY) {
+    return res.status(403).json({ message: "無權限" });
+  }
+
+  // 驗證欄位
+  if (!shopId || !name || !password) {
+    return res.status(400).json({ message: "請填寫所有欄位" });
+  }
+
+  // shopId 只允許英文、數字、dash
+  if (!/^[a-z0-9-]+$/.test(shopId)) {
+    return res.status(400).json({ message: "網址ID只能使用小寫英文、數字、連字號" });
+  }
+
+  // 檢查 shopId 是否已被使用
+  const shopRef = db.collection("shops").doc(shopId);
+  const existing = await shopRef.get();
+  if (existing.exists) {
+    return res.status(409).json({ message: "此網址ID已被使用，請換一個" });
+  }
+
+  // 加密密碼，建立店家文件
+  const passwordHash = bcrypt.hashSync(password, 10);
+  await shopRef.set({
+    name,
+    passwordHash,
+    categories: ["主食", "小菜", "湯品", "飲料"],
+    fontFamily: "Noto+Sans+TC",
+    tableCount: 0,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  res.json({ success: true, shopId });
+});
+
+// 每家店獨立登入
+app.post("/api/login/:shopId", async (req, res) => {
+  const { shopId } = req.params;
+  const { password } = req.body;
+
+  // 從 Firestore 拿這家店的密碼 hash
+  const shopRef = db.collection("shops").doc(shopId);
+  const shopDoc = await shopRef.get();
+
+  if (!shopDoc.exists) {
+    return res.status(404).json({ message: "找不到此店家" });
+  }
+
+  const { passwordHash } = shopDoc.data();
+  if (!passwordHash) {
+    return res.status(500).json({ message: "此店家尚未設定密碼" });
+  }
+
+  const isMatch = bcrypt.compareSync(password, passwordHash);
+  if (!isMatch) {
+    return res.status(401).json({ message: "密碼錯誤" });
+  }
+
+  const token = jwt.sign(
+    { role: "admin", shopId },             // token 裡帶 shopId
     process.env.JWT_SECRET,
-    { expiresIn: "8h" }                 // token 8小時後過期
+    { expiresIn: "8h" }
   );
 
-  res.json({ token });                  // 把token回傳給前端
+  res.json({ token });
 });
 
 // 驗證token的middleware
