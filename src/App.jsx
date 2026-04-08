@@ -158,6 +158,7 @@ export default function App() {
   const [adminAuth, setAdminAuth] = useState(false);
   const [shopName, setShopName] = useState("");
   const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [sizeItem, setSizeItem] = useState(null);
   const [newItem, setNewItem] = useState({ name: "", price: "", category: "主食", hasSizes: false, sizeSmallPrice: "", sizeLargePrice: "" });
   const [showAddForm, setShowAddForm] = useState(false);
@@ -277,7 +278,8 @@ export default function App() {
   const filteredMenu = category === "全部" ? menu : menu.filter(m => m.category === category);
 
   const submitOrder = async () => {
-    if (cartCount === 0) return;
+    if (cartCount === 0 || submitting) return;
+    setSubmitting(true);
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const todayOrders = orders.filter(o => o.time >= startOfDay);
@@ -301,6 +303,8 @@ export default function App() {
       setSuccess(orderNumber);
     } catch (err) {
       alert("送單失敗，請重試");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -512,7 +516,14 @@ export default function App() {
                         value={note}
                         onChange={e => setNote(e.target.value)}
                       />
-                      <button className="submit-btn" onClick={submitOrder}>送出訂單</button>
+                      <button
+                        className="submit-btn"
+                        onClick={submitOrder}
+                        disabled={submitting}
+                        style={{opacity: submitting ? 0.7 : 1, cursor: submitting ? "not-allowed" : "pointer"}}
+                      >
+                        {submitting ? "送出中..." : "送出訂單"}
+                      </button>
                     </div>
                   </div>
                 )}
