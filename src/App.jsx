@@ -44,8 +44,9 @@ const styles = `
     --serif: 'Noto Serif TC', serif;
     --sans: 'Noto Sans TC', sans-serif;
   }
-  body { font-family: var(--serif); background: var(--bg); color: var(--ink); }
-  .app { min-height: 100vh; max-width: 480px; margin: 0 auto; }
+  html { overflow-x: hidden; width: 100%; }
+  body { font-family: var(--serif); background: var(--bg); color: var(--ink); overflow-x: hidden; width: 100%; }
+  .app { min-height: 100vh; width: 100%; max-width: 480px; margin: 0 auto; overflow-x: hidden; }
 
   .nav { position: sticky; top: 0; z-index: 100; background: var(--bg); padding: 18px 20px 14px; display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 1px solid var(--border); }
   .nav-title { font-size: 22px; font-weight: 700; color: var(--ink); letter-spacing: 2px; font-family: var(--serif); line-height: 1; }
@@ -853,8 +854,8 @@ export default function App() {
                                         <div className="toggle-track"/>
                                         <div className="toggle-thumb"/>
                                       </label>
-                                      <label style={{fontSize:11, color:"var(--ink-3)", cursor:"pointer"}}>
-                                        📷
+                                      <label style={{fontSize:10, color:"var(--ink-3)", cursor:"pointer", border:"1px solid var(--border)", padding:"2px 6px", borderRadius:2, fontFamily:"var(--sans)", letterSpacing:"0.5px", whiteSpace:"nowrap"}}>
+                                        上傳圖片
                                         <input type="file" accept="image/*" style={{display:"none"}}
                                           onChange={(e) => { if (e.target.files[0]) uploadImage(e.target.files[0], item.id); }}
                                         />
@@ -887,8 +888,8 @@ export default function App() {
                                       <div className="toggle-track"/>
                                       <div className="toggle-thumb"/>
                                     </label>
-                                    <label style={{fontSize:11, color:"var(--ink-3)", cursor:"pointer"}}>
-                                      📷
+                                    <label style={{fontSize:10, color:"var(--ink-3)", cursor:"pointer", border:"1px solid var(--border)", padding:"2px 6px", borderRadius:2, fontFamily:"var(--sans)", letterSpacing:"0.5px", whiteSpace:"nowrap"}}>
+                                      上傳圖片
                                       <input type="file" accept="image/*" style={{display:"none"}}
                                         onChange={(e) => { if (e.target.files[0]) uploadImage(e.target.files[0], item.id); }}
                                       />

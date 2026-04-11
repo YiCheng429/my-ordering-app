@@ -40,7 +40,9 @@ export default function AdminLogin({ shopId, shopName, onLogin }) {
   return (
     <div style={{
       display:"flex", flexDirection:"column", alignItems:"center",
-      justifyContent:"center", minHeight:"100vh", gap:20,
+      justifyContent:"center",
+      height:"100vh",
+      overflow:"hidden",
       padding:32, background:"#F7F3EC",
     }}>
       <div style={{textAlign:"center", marginBottom:8}}>
