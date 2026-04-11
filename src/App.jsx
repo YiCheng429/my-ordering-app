@@ -447,7 +447,7 @@ export default function App() {
       <>
         <style>{styles}</style>
         <div className="no-shop">
-          <p>🏮</p>
+          <p style={{fontSize:40}}>—</p>
           <span>找不到店家，請確認網址是否正確</span>
         </div>
       </>
@@ -490,7 +490,7 @@ export default function App() {
                 </div>
                 <div className="menu-list">
                   {menu.length === 0 ? (
-                    <div className="empty-state"><p>🍽</p><span>菜單載入中...</span></div>
+                    <div className="empty-state"><p style={{fontSize:28}}>—</p><span>菜單載入中...</span></div>
                   ) : (
                     filteredMenu.map(item => {
                       const itemQty = cart.filter(x => x.id === item.id).reduce((a, b) => a + b.qty, 0);
@@ -498,7 +498,7 @@ export default function App() {
                         <div key={item.id} className={`menu-item ${!item.available ? "unavail" : ""}`}>
                           {item.image
                             ? <img src={item.image} style={{width:48, height:48, borderRadius:8, objectFit:"cover"}} />
-                            : <div className="menu-emoji">{item.emoji || "🍽"}</div>
+                            : <div className="menu-emoji" style={{background:"var(--border-light)",borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"var(--ink-3)",fontFamily:"var(--sans)"}}>無圖</div>
                           }
                           <div className="menu-info">
                             <div className="menu-name">{item.name}</div>
@@ -556,7 +556,7 @@ export default function App() {
                 {cartCount > 0 && (
                   <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:150,width:"calc(100% - 32px)",maxWidth:448}}>
                     <button className="submit-btn" onClick={() => setCartOpen(true)}>
-                      🛒 查看購物車 ({cartCount}) · NT$ {cartTotal}
+                      查看購物車 ({cartCount}) · NT$ {cartTotal}
                     </button>
                   </div>
                 )}
@@ -567,7 +567,7 @@ export default function App() {
                       <div className="drawer-title">確認訂單</div>
                       {cart.map(x => (
                         <div key={x.cartKey} className="cart-row">
-                          <div className="cart-row-name">{x.emoji} {x.name} × {x.qty}</div>
+                          <div className="cart-row-name">{x.name} × {x.qty}</div>
                           <div className="cart-row-price">NT$ {x.price * x.qty}</div>
                         </div>
                       ))}
@@ -668,7 +668,7 @@ export default function App() {
                 {adminTab === "orders" && (
                   <>
                     {pendingOrders.length === 0 ? (
-                      <div className="empty-state"><p>☕</p><span>目前沒有待處理訂單</span></div>
+                      <div className="empty-state"><p style={{fontSize:28}}>—</p><span>目前沒有待處理訂單</span></div>
                     ) : (
                       <>
                         <div className="section-title">待處理</div>
@@ -679,7 +679,7 @@ export default function App() {
                               <span className="order-time">{formatTime(order.time)}</span>
                               {order.tableNumber && (
                                 <span style={{fontSize:12, fontWeight:700, background:"#FFF3CD", color:"#856404", borderRadius:99, padding:"3px 10px"}}>
-                                  🪑 {order.tableNumber} 桌
+                                  {order.tableNumber} 桌
                                 </span>
                               )}
                               <span className="order-status status-pending">待處理</span>
@@ -687,12 +687,12 @@ export default function App() {
                             <div className="order-items">
                               {order.items?.map((item, i) => (
                                 <div key={i} className="order-item-row">
-                                  <span>{item.emoji || "🍽"} {item.name} × {item.qty}</span>
+                                  <span>{item.name} × {item.qty}</span>
                                   <span>NT$ {item.price * item.qty}</span>
                                 </div>
                               ))}
                             </div>
-                            {order.note && <div className="order-note">📝 {order.note}</div>}
+                            {order.note && <div className="order-note">備注：{order.note}</div>}
                             <div className="order-card-foot">
                               <div className="order-total">合計 <span>NT$ {order.total}</span></div>
                               <button className="done-btn" onClick={() => markDone(order.firestoreId)}>✓ 完成</button>
@@ -837,7 +837,7 @@ export default function App() {
                                   <div key={item.id} className="menu-admin-item">
                                     {item.image
                                       ? <img src={item.image} style={{width:48, height:48, borderRadius:8, objectFit:"cover"}} />
-                                      : <span style={{fontSize:24}}>🍽</span>
+                                      : <div style={{width:48,height:48,background:"var(--border-light)",borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"var(--ink-3)",fontFamily:"var(--sans)",flexShrink:0}}>無圖</div>
                                     }
                                     <div className="menu-admin-info">
                                       <div className="menu-admin-name">{item.name}</div>
@@ -876,7 +876,7 @@ export default function App() {
                                 <div key={item.id} className="menu-admin-item">
                                   {item.image
                                     ? <img src={item.image} style={{width:48, height:48, borderRadius:8, objectFit:"cover"}} />
-                                    : <span style={{fontSize:24}}>🍽</span>
+                                    : <div style={{width:48,height:48,background:"var(--border-light)",borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"var(--ink-3)",fontFamily:"var(--sans)",flexShrink:0}}>無圖</div>
                                   }
                                   <div className="menu-admin-info">
                                     <div className="menu-admin-name">{item.name}</div>
@@ -909,7 +909,7 @@ export default function App() {
                 {adminTab === "history" && (
                   <>
                     {doneOrders.length === 0 ? (
-                      <div className="empty-state"><p>📋</p><span>還沒有完成的訂單</span></div>
+                      <div className="empty-state"><p style={{fontSize:28}}>—</p><span>還沒有完成的訂單</span></div>
                     ) : (
                       <>
                         <div className="section-title">已完成</div>
@@ -920,7 +920,7 @@ export default function App() {
                               <span className="order-time">{formatTime(order.time)}</span>
                               {order.tableNumber && (
                                 <span style={{fontSize:12, fontWeight:700, background:"#D1FAE5", color:"#065F46", borderRadius:99, padding:"3px 10px"}}>
-                                  🪑 {order.tableNumber} 桌
+                                  {order.tableNumber} 桌
                                 </span>
                               )}
                               <span className="order-status status-done">完成</span>
@@ -928,12 +928,12 @@ export default function App() {
                             <div className="order-items">
                               {order.items?.map((item, i) => (
                                 <div key={i} className="order-item-row">
-                                  <span>{item.emoji || "🍽"} {item.name} × {item.qty}</span>
+                                  <span>{item.name} × {item.qty}</span>
                                   <span>NT$ {item.price * item.qty}</span>
                                 </div>
                               ))}
                             </div>
-                            {order.note && <div className="order-note">📝 {order.note}</div>}
+                            {order.note && <div className="order-note">備注：{order.note}</div>}
                             <div className="order-card-foot">
                               <div className="order-total">合計 <span>NT$ {order.total}</span></div>
                               <span className="done-label">✓ 已完成</span>
