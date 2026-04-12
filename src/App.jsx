@@ -99,7 +99,7 @@ const styles = `
   .success-label { font-size: 13px; color: var(--ink-3); display: block; letter-spacing: 2px; font-family: var(--sans); }
   .back-btn { margin-top: 16px; padding: 10px 28px; border: 1px solid var(--ink); background: transparent; color: var(--ink); border-radius: 2px; font-size: 12px; font-weight: 500; cursor: pointer; letter-spacing: 2px; font-family: var(--sans); }
 
-  .admin-wrap { padding: 0 0 80px; }
+  .admin-wrap { padding: 0 0 80px; width: 100%; overflow-x: hidden; }
   .admin-header { background: var(--ink); color: var(--bg); padding: 20px 20px 16px; }
   .admin-header h2 { font-size: 18px; font-weight: 500; letter-spacing: 3px; color: var(--bg); font-family: var(--serif); }
   .admin-header p { font-size: 11px; color: var(--ink-3); margin-top: 5px; font-family: var(--sans); letter-spacing: 1px; }
@@ -417,11 +417,10 @@ export default function App() {
     setView("customer");
   };
 
-  const pendingOrders = orders.filter(o => o.status === "pending");
+  const currentOrders = orders.filter(o => !revenueResetAt || o.time > revenueResetAt);
+  const pendingOrders = currentOrders.filter(o => o.status === "pending");
   const doneOrders = orders.filter(o => o.status === "done");
-  const currentRevenue = orders
-    .filter(o => !revenueResetAt || o.time > revenueResetAt)
-    .reduce((s, o) => s + o.total, 0);
+  const currentRevenue = currentOrders.reduce((s, o) => s + o.total, 0);
 
   const resetRevenue = async () => {
     if (!window.confirm("確定重置營收？目前的營收會存入歷史紀錄。")) return;
@@ -607,7 +606,7 @@ export default function App() {
                 </div>
                 <div className="stats-row">
                   <div className="stat-card">
-                    <div className="stat-num">{orders.length}</div>
+                    <div className="stat-num">{currentOrders.length}</div>
                     <div className="stat-label">總訂單</div>
                   </div>
                   <div className="stat-card">
